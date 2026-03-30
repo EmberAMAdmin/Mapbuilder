@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Map Builder</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; }
+
+  /* ── Layout ── */
+  #shell { display: flex; height: 100vh; }
+  #sidebar { width: 320px; min-width: 320px; background: #fff; border-left: 1px solid #e2e5ea; display: flex; flex-direction: column; overflow: hidden; z-index: 10; order: 2; }
+  #map-wrap { flex: 1; position: relative; overflow: hidden; order: 1; }
+  #map { width: 100%; height: 100%; }
+
+  /* ── Sidebar Header ── */
+  #sidebar-head { padding: 14px 16px 10px; border-bottom: 1px solid #e2e5ea; background: #1a2840; }
+  #sidebar-head h1 { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.2px; margin-bottom: 2px; }
+  #sidebar-head p { font-size: 11px; color: rgba(255,255,255,0.5); }
+
+  /* ── Tabs ── */
+  #tabs { display: flex; border-bottom: 1px solid #e2e5ea; background: #f8f9fb; }
+  .tab { flex: 1; padding: 9px 4px; font-size: 12px; font-weight: 600; color: #7a8494; border: none; background: transparent; cursor: pointer; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; letter-spacing: 0.1px; }
+  .tab.active { color: #1a2840; border-bottom-color: #1a2840; background: #fff; }
+  .tab:hover:not(.active) { color: #1a2840; }
+
+  /* ── Panels ── */
+  #panel-props, #panel-settings { display: none; flex-direction: column; overflow: hidden; flex: 1; }
+  #panel-props.show, #panel-settings.show { display: flex; }
+
+  /* ── Subject static block ── */
+  #subject-static { margin: 10px 12px 0; border: 1.5px solid #e2c84b; border-radius: 8px; overflow: visible; background: #fffdf0; flex-shrink: 0; }
+  #subject-static .block-head { background: #1a2840; padding: 7px 10px; display: flex; align-items: center; gap: 6px; border-radius: 6px 6px 0 0; }
+  #subject-static .block-head .star { font-size: 12px; color: #e2c84b; }
+  #subject-static .block-head .head-label { font-size: 11px; font-weight: 700; color: #fff; letter-spacing: 0.3px; text-transform: uppercase; flex: 1; }
+  #subject-static .block-head .edit-subject-btn { font-size: 10px; color: rgba(255,255,255,0.5); background: transparent; border: none; cursor: pointer; padding: 0; font-weight: 600; transition: color .1s; }
+  #subject-static .block-head .edit-subject-btn:hover { color: #e2c84b; }
+
+  #subject-display { padding: 8px 10px; }
+  #subject-display .subj-name { font-size: 13px; font-weight: 700; color: #1a2840; }
+  #subject-display .subj-addr { font-size: 11px; color: #7a8494; margin-top: 2px; }
+
+  #subject-form { padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; }
+
+  /* ── Comps header ── */
+  #comps-header { display: flex; align-items: center; padding: 10px 12px 6px; flex-shrink: 0; }
+  #comps-header .comps-label { font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #9aa0ab; flex: 1; }
+  #add-comp-btn { width: 26px; height: 26px; border-radius: 6px; background: #1a2840; color: #fff; border: none; font-size: 18px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s; flex-shrink: 0; }
+  #add-comp-btn:hover { background: #3b6ed4; }
+
+  /* ── Inline add form ── */
+  #inline-add { margin: 0 12px 6px; border: 1px solid #3b6ed4; border-radius: 8px; overflow: visible; background: #f0f5ff; display: none; flex-direction: column; gap: 5px; padding: 8px 10px; flex-shrink: 0; }
+  #inline-add.open { display: flex; }
+  #inline-add .inline-head { font-size: 10px; font-weight: 700; color: #3b6ed4; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+  #inline-add .inline-actions { display: flex; gap: 6px; margin-top: 2px; }
+  .inline-save-btn { flex: 1; padding: 6px; background: #3b6ed4; color: #fff; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .15s; font-family: inherit; }
+  .inline-save-btn:hover { background: #2d5cbf; }
+  .inline-cancel-btn { padding: 6px 10px; background: transparent; color: #7a8494; border: 1px solid #d8dce3; border-radius: 5px; font-size: 12px; cursor: pointer; font-family: inherit; transition: all .15s; }
+  .inline-cancel-btn:hover { border-color: #9aa0ab; color: #1a2840; }
+
+  /* ── Shared input fields ── */
+  .f-input { padding: 6px 8px; border: 1px solid #d8dce3; border-radius: 5px; font-size: 12px; color: #1a2840; outline: none; background: #fff; font-family: inherit; transition: border-color .15s; width: 100%; }
+  .f-input:focus { border-color: #3b6ed4; }
+  .f-input::placeholder { color: #b0b6bf; }
+  .save-subject-btn { padding: 7px; background: #1a2840; color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; letter-spacing: 0.2px; transition: background .15s; font-family: inherit; }
+  .save-subject-btn:hover { background: #243755; }
+
+  /* ── Autocomplete ── */
+  .ac-wrap { position: relative; }
+  .ac-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #d8dce3; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.12); z-index: 9999; margin-top: 2px; overflow: hidden; display: none; }
+  .ac-dropdown.open { display: block; }
+  .ac-item { padding: 8px 10px; font-size: 12px; color: #1a2840; cursor: pointer; border-bottom: 1px solid #f0f2f5; display: flex; flex-direction: column; gap: 1px; transition: background .1s; }
+  .ac-item:last-child { border-bottom: none; }
+  .ac-item:hover, .ac-item.focused { background: #f0f5ff; }
+  .ac-item .ac-main { font-weight: 600; }
+  .ac-item .ac-sub { font-size: 10px; color: #9aa0ab; }
+  .ac-loading { padding: 8px 10px; font-size: 11px; color: #9aa0ab; text-align: center; }
+
+  /* ── Props list ── */
+  #props-scroll { flex: 1; overflow-y: auto; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 5px; min-height: 0; }
+  .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; color: #9aa0ab; text-align: center; }
+  .empty-state .ico { font-size: 28px; margin-bottom: 8px; }
+  .empty-state p { font-size: 12px; line-height: 1.5; }
+
+  .prop-row { display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid #e2e5ea; border-radius: 6px; padding: 7px 8px; cursor: grab; transition: border-color .15s; }
+  .prop-row:active { cursor: grabbing; }
+  .prop-row:hover { border-color: #b0bcd4; }
+  .prop-row.dragging { opacity: .4; }
+  .prop-row.drag-over { border-color: #3b6ed4; background: #eef3fd; }
+
+  .pin-num { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .prop-info { flex: 1; min-width: 0; }
+  .prop-name { font-size: 12px; font-weight: 600; color: #1a2840; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prop-addr { font-size: 10px; color: #9aa0ab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .prop-dist { font-size: 10px; margin-top: 1px; font-weight: 500; }
+
+  .move-btns { display: flex; flex-direction: column; gap: 1px; }
+  .move-btn { width: 16px; height: 16px; border: none; background: transparent; color: #b0b6bf; cursor: pointer; border-radius: 2px; font-size: 10px; display: flex; align-items: center; justify-content: center; transition: color .1s, background .1s; padding: 0; line-height: 1; }
+  .move-btn:hover { color: #1a2840; background: #e8eaf0; }
+  .del-btn { width: 22px; height: 22px; border: none; background: transparent; color: #c0c6d0; cursor: pointer; border-radius: 4px; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: color .1s, background .1s; flex-shrink: 0; }
+  .del-btn:hover { color: #e05c5c; background: #fdeaea; }
+
+  /* ── Settings Panel ── */
+  #panel-settings { padding: 0 0 16px; overflow-y: auto; }
+  .section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #9aa0ab; padding: 12px 16px 6px; }
+  .setting-group { padding: 0 16px 10px; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f2f5; }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-label { font-size: 12px; color: #1a2840; font-weight: 500; }
+  .toggle-sub { font-size: 10px; color: #9aa0ab; margin-top: 1px; }
+  .toggle { position: relative; width: 34px; height: 18px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track { position: absolute; inset: 0; background: #d8dce3; border-radius: 9px; cursor: pointer; transition: background .2s; }
+  .toggle-track::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  .toggle input:checked + .toggle-track { background: #3b6ed4; }
+  .toggle input:checked + .toggle-track::after { transform: translateX(16px); }
+
+  .map-style-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+  .style-btn { padding: 7px 4px; border: 1.5px solid #e2e5ea; border-radius: 6px; font-size: 11px; font-weight: 500; color: #4a5568; background: #fff; cursor: pointer; text-align: center; transition: all .15s; }
+  .style-btn:hover { border-color: #3b6ed4; color: #3b6ed4; }
+  .style-btn.active { border-color: #1a2840; background: #1a2840; color: #fff; }
+
+  .color-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #f0f2f5; }
+  .color-row:last-child { border-bottom: none; }
+  .color-label { font-size: 12px; color: #1a2840; flex: 1; font-weight: 500; }
+  .color-row input[type=color] { width: 32px; height: 24px; border: 1px solid #e2e5ea; border-radius: 4px; cursor: pointer; padding: 2px; background: #fff; }
+
+  /* ── Legend ── */
+  #legend { position: absolute; bottom: 32px; left: 16px; background: rgba(255,255,255,0.97); border: 1px solid #e2e5ea; border-radius: 8px; min-width: 200px; max-width: 280px; box-shadow: 0 2px 12px rgba(0,0,0,.12); cursor: move; user-select: none; z-index: 20; }
+  #legend-head { padding: 8px 12px; background: #1a2840; border-radius: 7px 7px 0 0; font-size: 11px; font-weight: 700; color: #fff; letter-spacing: 0.3px; display: flex; align-items: center; justify-content: space-between; }
+  #legend-head span { font-size: 10px; color: rgba(255,255,255,0.4); font-weight: 400; }
+  #legend-body { padding: 8px 10px; }
+  .legend-section-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #9aa0ab; padding: 4px 0; margin-top: 4px; border-top: 1px solid #f0f2f5; }
+  .legend-section-title:first-child { margin-top: 0; border-top: none; }
+  .legend-item { display: flex; align-items: center; gap: 7px; padding: 3px 0; font-size: 11px; color: #1a2840; }
+  .legend-dot { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  #legend-empty { padding: 12px; font-size: 11px; color: #9aa0ab; text-align: center; }
+
+
+  /* ── Share box (sidebar bottom) ── */
+  #share-box { flex-shrink: 0; border-top: 1px solid #e2e5ea; padding: 12px; background: #fff; }
+  #share-box .share-label { font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #9aa0ab; margin-bottom: 8px; }
+  #share-url-row { display: flex; border: 1px solid #e2e5ea; border-radius: 6px; overflow: hidden; margin-bottom: 6px; }
+  #share-url { flex: 1; padding: 7px 8px; font-size: 11px; color: #7a8494; font-family: 'SF Mono','Fira Code',monospace; background: #f8f9fb; border: none; outline: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: all; cursor: text; min-width: 0; }
+  #share-copy-btn { padding: 7px 10px; background: #f0f2f5; border: none; border-left: 1px solid #e2e5ea; font-size: 11px; font-weight: 600; color: #1a2840; cursor: pointer; white-space: nowrap; transition: background .15s; flex-shrink: 0; }
+  #share-copy-btn:hover { background: #e2e8f0; }
+  #share-copy-btn.copied { color: #16a34a; background: #f0fdf4; }
+  #share-save-btn { width: 100%; padding: 8px; background: #1a2840; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; color: #fff; cursor: pointer; transition: background .15s; font-family: inherit; }
+  #share-save-btn:hover { background: #3b6ed4; }
+
+  /* ── Map controls ── */
+  .map-ctrl-group { position: absolute; bottom: 28px; right: 14px; display: flex; flex-direction: column; gap: 2px; z-index: 10; }
+  .map-ctrl { width: 34px; height: 34px; background: #fff; border: 1px solid #e2e5ea; border-radius: 6px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .1s; color: #4a5568; }
+  .map-ctrl:hover { background: #f0f2f5; }
+</style>
+</head>
+<body>
+<div id="shell">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <div id="sidebar">
+    <div id="sidebar-head">
+      <h1>Map Builder</h1>
+      <p>Comparable mapping by Ember</p>
+    </div>
+
+    <div id="tabs">
+      <button class="tab active" onclick="showTab('props')">Properties</button>
+      <button class="tab" onclick="showTab('settings')">Settings</button>
+    </div>
+
+    <!-- ── PROPERTIES PANEL ── -->
+    <div id="panel-props" class="show">
+
+      <!-- Subject — always pinned at top -->
+      <div id="subject-static">
+        <div class="block-head">
+          <span class="star">★</span>
+          <span class="head-label">Subject Property</span>
+          <button class="edit-subject-btn" id="subject-edit-btn" onclick="toggleSubjectEdit()" style="display:none">Edit</button>
+        </div>
+        <!-- Display mode (after subject is set) -->
+        <div id="subject-display" style="display:none">
+          <div class="subj-name" id="subject-name-display"></div>
+          <div class="subj-addr" id="subject-addr-display"></div>
+        </div>
+        <!-- Form mode -->
+        <div id="subject-form">
+          <input class="f-input" id="s-name" type="text" placeholder="Property name" autocomplete="off" />
+          <div class="ac-wrap">
+            <input class="f-input" id="s-addr" type="text" placeholder="Address" autocomplete="off"
+              oninput="acInput(this,'s-ac')" onkeydown="acKey(event,'s-ac')" />
+            <div class="ac-dropdown" id="s-ac"></div>
+          </div>
+          <button class="save-subject-btn" onclick="setSubject()">Set as Subject</button>
+        </div>
+      </div>
+
+      <!-- Comps section header -->
+      <div id="comps-header">
+        <span class="comps-label">Comparables</span>
+        <button id="add-comp-btn" onclick="toggleInlineAdd()" title="Add comparable">+</button>
+      </div>
+
+      <!-- Inline add form (slides open below header) -->
+      <div id="inline-add">
+        <div class="inline-head">New Comparable</div>
+        <input class="f-input" id="c-name" type="text" placeholder="Property name" autocomplete="off" />
+        <div class="ac-wrap">
+          <input class="f-input" id="c-addr" type="text" placeholder="Address" autocomplete="off"
+            oninput="acInput(this,'c-ac')" onkeydown="acKey(event,'c-ac')" />
+          <div class="ac-dropdown" id="c-ac"></div>
+        </div>
+        <div class="inline-actions">
+          <button class="inline-save-btn" onclick="addComp()">Add to Map</button>
+          <button class="inline-cancel-btn" onclick="toggleInlineAdd(false)">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Scrollable comps list -->
+      <div id="props-scroll">
+        <div class="empty-state" id="empty-msg">
+          <div class="ico">📍</div>
+          <p>Set a subject property above,<br>then tap + to add comparables.</p>
+        </div>
+      </div>
+
+      <!-- Save / Share — static at bottom -->
+      <div id="share-box">
+        <div class="share-label">Save &amp; Share</div>
+        <div id="share-url-row">
+          <input id="share-url" readonly value="Click Save Map to generate a link" />
+          <button id="share-copy-btn" onclick="copyShareLink()">&#x2398; Copy</button>
+        </div>
+        <button id="share-save-btn" onclick="saveMap()">Save Map</button>
+      </div>
+
+    </div>
+
+    <!-- ── SETTINGS PANEL ── -->
+    <div id="panel-settings">
+      <div class="section-label">Map Style</div>
+      <div class="setting-group">
+        <div class="map-style-grid">
+          <button class="style-btn active" onclick="setStyle('streets',this)">Streets</button>
+          <button class="style-btn" onclick="setStyle('satellite',this)">Satellite</button>
+          <button class="style-btn" onclick="setStyle('satellite-streets',this)">Hybrid</button>
+          <button class="style-btn" onclick="setStyle('light',this)">Light</button>
+          <button class="style-btn" onclick="setStyle('dark',this)">Dark</button>
+          <button class="style-btn" onclick="setStyle('outdoors',this)">Terrain</button>
+        </div>
+      </div>
+      <div class="section-label">Radius Rings</div>
+      <div class="setting-group">
+        <div class="toggle-row">
+          <div class="toggle-label">1-mile ring</div>
+          <label class="toggle"><input type="checkbox" id="r1" onchange="toggleRing(1)"><div class="toggle-track"></div></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-label">3-mile ring</div>
+          <label class="toggle"><input type="checkbox" id="r3" onchange="toggleRing(3)"><div class="toggle-track"></div></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-label">5-mile ring</div>
+          <label class="toggle"><input type="checkbox" id="r5" onchange="toggleRing(5)"><div class="toggle-track"></div></label>
+        </div>
+      </div>
+      <div class="section-label">Pin Colors</div>
+      <div class="setting-group">
+        <div class="color-row"><span class="color-label">Subject pin</span><input type="color" id="clr-subject" value="#c8a800" oninput="refreshMarkers()"></div>
+        <div class="color-row"><span class="color-label">Comparable pins</span><input type="color" id="clr-comp" value="#3b6ed4" oninput="refreshMarkers()"></div>
+        <div class="color-row"><span class="color-label">Ring fill</span><input type="color" id="clr-ring" value="#3b6ed4" oninput="refreshRings()"></div>
+      </div>
+      <div class="section-label">Legend</div>
+      <div class="setting-group">
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Segment by ring distance</div>
+            <div class="toggle-sub">Groups pins by Within 1/3/5 mi</div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="legend-segment" checked onchange="renderLegend()"><div class="toggle-track"></div></label>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ MAP ═══ -->
+  <div id="map-wrap">
+    <div id="map"></div>
+    <div id="legend">
+      <div id="legend-head">MAP LEGEND</div>
+      <div id="legend-body"><div id="legend-empty">Add properties to see legend</div></div>
+    </div>
+        <div class="map-ctrl-group">
+      <button class="map-ctrl" onclick="fitAll()" title="Fit all pins">⊡</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiY2VjYmluZ28iLCJhIjoiY21uZG5kbDRrMWpkZTJycHgzYWtoMHd0NyJ9.Alr55cfHzcTXVsGwPodUsQ';
+
+const STYLES = {
+  streets:             'mapbox://styles/mapbox/streets-v12',
+  satellite:           'mapbox://styles/mapbox/satellite-v9',
+  'satellite-streets': 'mapbox://styles/mapbox/satellite-streets-v12',
+  light:               'mapbox://styles/mapbox/light-v11',
+  dark:                'mapbox://styles/mapbox/dark-v11',
+  outdoors:            'mapbox://styles/mapbox/outdoors-v12',
+};
+
+let subject     = null;
+let comps       = [];
+let markers     = [];
+let map         = null;
+let mapReady    = false;
+let activeRings = new Set();
+let dragSrc     = null;
+let acTimers    = {};
+let acSelected  = {};  // { inputId: { lat, lng, fullAddress } }
+
+// ── Init map ──
+function initMap() {
+  mapboxgl.accessToken = MAPBOX_TOKEN;
+  map = new mapboxgl.Map({
+    container: 'map', style: STYLES.streets,
+    center: [-98.58, 39.83], zoom: 4, attributionControl: false,
+  });
+  map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'bottom-right');
+  map.on('load',       () => { mapReady = true; refreshMarkers(); refreshRings(); });
+  map.on('style.load', () => { if (mapReady) { refreshMarkers(); refreshRings(); } });
+}
+
+// ── Tabs ──
+function showTab(tab) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['props','settings'][i] === tab));
+  document.getElementById('panel-props').classList.toggle('show', tab === 'props');
+  document.getElementById('panel-settings').classList.toggle('show', tab === 'settings');
+}
+
+// ── Autocomplete (Mapbox Geocoding) ──
+function acInput(input, dropId) {
+  const q    = input.value.trim();
+  const drop = document.getElementById(dropId);
+  clearTimeout(acTimers[dropId]);
+  acSelected[input.id] = null;
+  if (q.length < 3) { drop.classList.remove('open'); drop.innerHTML = ''; return; }
+  acTimers[dropId] = setTimeout(async () => {
+    drop.innerHTML = '<div class="ac-loading">Searching…</div>';
+    drop.classList.add('open');
+    try {
+      const prox = subject ? `&proximity=${subject.lng},${subject.lat}` : '';
+      const url  = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&types=address,poi&limit=5&language=en${prox}`;
+      const data = await (await fetch(url)).json();
+      if (!data.features || !data.features.length) { drop.innerHTML = '<div class="ac-loading">No results found</div>'; return; }
+      drop.innerHTML = data.features.map(f => {
+        const isPOI    = f.place_type && f.place_type.includes('poi');
+        const mainName = isPOI ? f.text : f.place_name.split(',')[0];
+        const parts    = f.place_name.split(', ');
+        const sub      = parts.slice(1).slice(0,3).join(', ');
+        return `<div class="ac-item" data-full="${esc(f.place_name)}" data-name="${esc(mainName)}" data-lat="${f.center[1]}" data-lng="${f.center[0]}" onclick="acPick(this,'${input.id}','${dropId}')">
+          <span class="ac-main">${esc(mainName)}</span>
+          <span class="ac-sub">${esc(sub)}</span>
+        </div>`;
+      }).join('');
+    } catch(e) { drop.innerHTML = '<div class="ac-loading">Could not load suggestions</div>'; }
+  }, 280);
+}
+
+function acPick(el, inputId, dropId) {
+  document.getElementById(inputId).value = el.dataset.full;
+  acSelected[inputId] = { lat: parseFloat(el.dataset.lat), lng: parseFloat(el.dataset.lng), fullAddress: el.dataset.full, suggestedName: el.dataset.name };
+  const drop = document.getElementById(dropId);
+  drop.classList.remove('open'); drop.innerHTML = '';
+  const nameId = inputId === 's-addr' ? 's-name' : 'c-name';
+  const nameEl = document.getElementById(nameId);
+  if (nameEl && !nameEl.value.trim() && el.dataset.name) { nameEl.value = el.dataset.name; }
+  else if (nameEl && !nameEl.value.trim()) { nameEl.focus(); }
+}
+
+function acKey(e, dropId) {
+  const drop = document.getElementById(dropId);
+  if (!drop.classList.contains('open')) return;
+  const items = drop.querySelectorAll('.ac-item');
+  const cur   = drop.querySelector('.ac-item.focused');
+  if (e.key === 'ArrowDown') { e.preventDefault(); const n = cur ? cur.nextElementSibling || items[0] : items[0]; cur && cur.classList.remove('focused'); n && n.classList.add('focused'); }
+  else if (e.key === 'ArrowUp')  { e.preventDefault(); const p = cur ? cur.previousElementSibling || items[items.length-1] : items[items.length-1]; cur && cur.classList.remove('focused'); p && p.classList.add('focused'); }
+  else if (e.key === 'Enter')  { const f = drop.querySelector('.ac-item.focused'); if (f) { e.preventDefault(); f.click(); } }
+  else if (e.key === 'Escape') { drop.classList.remove('open'); }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.ac-wrap')) document.querySelectorAll('.ac-dropdown').forEach(d => d.classList.remove('open'));
+});
+
+// ── Subject ──
+function toggleSubjectEdit() {
+  const form    = document.getElementById('subject-form');
+  const display = document.getElementById('subject-display');
+  const btn     = document.getElementById('subject-edit-btn');
+  const editing = form.style.display !== 'none';
+  if (editing) {
+    form.style.display = 'none'; display.style.display = 'block'; btn.textContent = 'Edit';
+  } else {
+    form.style.display = 'flex'; display.style.display = 'none'; btn.textContent = 'Cancel';
+    document.getElementById('s-name').value = subject ? subject.name : '';
+    document.getElementById('s-addr').value = subject ? subject.addr : '';
+  }
+}
+
+async function setSubject() {
+  const name = document.getElementById('s-name').value.trim();
+  const addr = document.getElementById('s-addr').value.trim();
+  if (!name || !addr) { alert('Enter both name and address.'); return; }
+  const btn = document.querySelector('#subject-form .save-subject-btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  let lat, lng;
+  const sel = acSelected['s-addr'];
+  if (sel && sel.lat) { lat = sel.lat; lng = sel.lng; }
+  else {
+    const geo = await geocodeFallback(addr);
+    if (!geo) { btn.textContent = 'Set as Subject'; btn.disabled = false; alert('Could not find that address.'); return; }
+    lat = geo.lat; lng = geo.lng;
+  }
+
+  subject = { id: 'subject', name, addr, lat, lng };
+  acSelected['s-addr'] = null;
+
+  document.getElementById('subject-name-display').textContent = name;
+  document.getElementById('subject-addr-display').textContent = addr;
+  document.getElementById('subject-display').style.display    = 'block';
+  document.getElementById('subject-form').style.display       = 'none';
+  document.getElementById('subject-edit-btn').style.display   = 'inline';
+  document.getElementById('subject-edit-btn').textContent     = 'Edit';
+
+  btn.textContent = 'Set as Subject'; btn.disabled = false;
+  recalcDists(); sortComps(); renderPropList(); refreshMarkers(); refreshRings(); fitAll();
+}
+
+function deleteSubject() {
+  subject = null;
+  comps.forEach(c => c.dist = null);
+  document.getElementById('subject-display').style.display  = 'none';
+  document.getElementById('subject-form').style.display     = 'flex';
+  document.getElementById('subject-edit-btn').style.display = 'none';
+  document.getElementById('s-name').value = '';
+  document.getElementById('s-addr').value = '';
+  renderPropList(); refreshMarkers(); refreshRings();
+}
+
+// ── Inline add ──
+function toggleInlineAdd(force) {
+  const el   = document.getElementById('inline-add');
+  const open = force !== undefined ? force : !el.classList.contains('open');
+  el.classList.toggle('open', open);
+  if (open) {
+    document.getElementById('c-name').value = '';
+    document.getElementById('c-addr').value = '';
+    acSelected['c-addr'] = null;
+    setTimeout(() => document.getElementById('c-name').focus(), 50);
+  }
+}
+
+async function addComp() {
+  const name = document.getElementById('c-name').value.trim();
+  const addr = document.getElementById('c-addr').value.trim();
+  if (!name || !addr) { alert('Enter both name and address.'); return; }
+  const btn = document.querySelector('.inline-save-btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  let lat, lng;
+  const sel = acSelected['c-addr'];
+  if (sel && sel.lat) { lat = sel.lat; lng = sel.lng; }
+  else {
+    const geo = await geocodeFallback(addr);
+    if (!geo) { btn.textContent = 'Add to Map'; btn.disabled = false; alert('Could not find that address.'); return; }
+    lat = geo.lat; lng = geo.lng;
+  }
+
+  comps.push({ id: Date.now(), name, addr, lat, lng, dist: null });
+  acSelected['c-addr'] = null;
+  if (subject) { recalcDists(); sortComps(); }
+
+  btn.textContent = 'Add to Map'; btn.disabled = false;
+  toggleInlineAdd(false);
+  renderPropList(); refreshMarkers(); fitAll();
+}
+
+function deleteComp(id) { comps = comps.filter(c => c.id !== id); renderPropList(); refreshMarkers(); refreshRings(); }
+
+// ── Fallback geocoder (Nominatim) ──
+async function geocodeFallback(address) {
+  try {
+    const d = await (await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`, { headers: {'Accept-Language':'en'} })).json();
+    if (d && d[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+  } catch(e) {}
+  return null;
+}
+
+function recalcDists() { if (!subject) return; comps.forEach(c => c.dist = distMi(subject.lat, subject.lng, c.lat, c.lng)); }
+function sortComps()   { comps.sort((a, b) => (a.dist ?? 99999) - (b.dist ?? 99999)); }
+
+function distMi(lat1, lng1, lat2, lng2) {
+  const R = 3958.8, dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function moveComp(id, dir) {
+  const i = comps.findIndex(c => c.id === id), j = i + dir;
+  if (j < 0 || j >= comps.length) return;
+  [comps[i], comps[j]] = [comps[j], comps[i]];
+  renderPropList(); refreshMarkers(); renderLegend();
+}
+
+// ── Render comps list ──
+function renderPropList() {
+  const scroll = document.getElementById('props-scroll');
+  if (comps.length === 0) {
+    scroll.innerHTML = `<div class="empty-state"><div class="ico">📍</div><p>No comparables yet.<br>Tap + to add one.</p></div>`;
+    renderLegend(); return;
+  }
+  const ringMiles = getActiveRingMiles();
+  const clrComp   = document.getElementById('clr-comp').value;
+
+  scroll.innerHTML = comps.map((c, i) => {
+    const num    = i + 1;
+    const dStr   = c.dist != null ? c.dist.toFixed(1) + ' mi' : '';
+    const distTag = dStr ? `<div class="prop-dist" style="color:${clrComp}">${dStr}</div>` : '';
+    return `<div class="prop-row" id="row-${c.id}" draggable="true"
+        ondragstart="dragStart(event,${c.id})" ondragover="dragOver(event,${c.id})"
+        ondrop="dragDrop(event,${c.id})" ondragleave="dragLeave(event,${c.id})">
+      <div class="pin-num" style="background:${clrComp}">${num}</div>
+      <div class="prop-info">
+        <div class="prop-name">${esc(c.name)}</div>
+        <div class="prop-addr">${esc(c.addr)}</div>
+        ${distTag}
+      </div>
+      <div class="move-btns">
+        <button class="move-btn" onclick="moveComp(${c.id},-1)">▲</button>
+        <button class="move-btn" onclick="moveComp(${c.id},1)">▼</button>
+      </div>
+      <button class="del-btn" onclick="deleteComp(${c.id})">×</button>
+    </div>`;
+  }).join('');
+  renderLegend();
+}
+
+// ── Drag & drop ──
+function dragStart(e, id) { dragSrc = id; e.currentTarget.classList.add('dragging'); }
+function dragOver(e, id)  { e.preventDefault(); if (dragSrc !== id) document.getElementById('row-'+id)?.classList.add('drag-over'); }
+function dragLeave(e, id) { document.getElementById('row-'+id)?.classList.remove('drag-over'); }
+function dragDrop(e, id) {
+  e.preventDefault();
+  document.getElementById('row-'+id)?.classList.remove('drag-over');
+  document.getElementById('row-'+dragSrc)?.classList.remove('dragging');
+  if (!dragSrc || dragSrc === id) return;
+  const from = comps.findIndex(c => c.id === dragSrc), to = comps.findIndex(c => c.id === id);
+  if (from < 0 || to < 0) return;
+  comps.splice(to, 0, comps.splice(from, 1)[0]);
+  dragSrc = null;
+  renderPropList(); refreshMarkers(); renderLegend();
+}
+
+// ── Markers ──
+function refreshMarkers() {
+  if (!mapReady) return;
+  markers.forEach(m => m.remove()); markers = [];
+  const clrSubject = document.getElementById('clr-subject').value;
+  const clrComp    = document.getElementById('clr-comp').value;
+
+  const addMarker = (lat, lng, label, color, title, addr) => {
+    const el = document.createElement('div');
+    el.innerHTML = makePinSVG(label, color);
+    el.style.cursor = 'pointer';
+    const addrHtml = addr ? '<div style="font-size:11px;color:#7a8494;margin-top:3px">' + esc(addr) + '</div>' : '';
+    const m = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+      .setLngLat([lng, lat])
+      .setPopup(new mapboxgl.Popup({ offset: 25, closeButton: false })
+        .setHTML('<div style="font-family:inherit;padding:4px 2px"><strong style="font-size:13px">' + esc(title) + '</strong>' + addrHtml + '</div>'))
+      .addTo(map);
+    markers.push(m);
+  };
+
+  if (subject) addMarker(subject.lat, subject.lng, '★', clrSubject, subject.name, subject.addr);
+  comps.forEach((c, i) => { addMarker(c.lat, c.lng, String(i+1), clrComp, c.name, c.addr); });
+  renderLegend();
+}
+
+function makePinSVG(label, color) {
+  const fs = label === '★' ? 13 : 11;
+  return `<svg width="28" height="34" viewBox="0 0 28 34" xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 33 C14 33 2 21 2 12 a12 12 0 1 1 24 0 C26 21 14 33 14 33Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+    <text x="14" y="16" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="${fs}" font-weight="700" font-family="-apple-system,sans-serif">${label}</text>
+  </svg>`;
+}
+
+// ── Rings ──
+function getActiveRingMiles() { return activeRings.has(1) ? 1 : activeRings.has(3) ? 3 : activeRings.has(5) ? 5 : null; }
+
+function toggleRing(miles) {
+  document.getElementById('r'+miles).checked ? activeRings.add(miles) : activeRings.delete(miles);
+  refreshRings(); renderPropList(); refreshMarkers();
+}
+
+function refreshRings() {
+  if (!mapReady || !map) return;
+  [1,3,5].forEach(m => { const s='ring-'+m; if(map.getLayer(s+'-fill'))map.removeLayer(s+'-fill'); if(map.getLayer(s+'-line'))map.removeLayer(s+'-line'); if(map.getSource(s))map.removeSource(s); });
+  if (!subject) return;
+  const clrRing = document.getElementById('clr-ring').value;
+  activeRings.forEach(miles => {
+    const s = 'ring-'+miles, op = {1:.13,3:.08,5:.05};
+    map.addSource(s, { type:'geojson', data: circleGeoJSON(subject.lat, subject.lng, miles*1.60934) });
+    map.addLayer({ id:s+'-fill', type:'fill',   source:s, paint:{'fill-color':clrRing,'fill-opacity':op[miles]} });
+    map.addLayer({ id:s+'-line', type:'line',   source:s, paint:{'line-color':clrRing,'line-width':1.5,'line-opacity':.6} });
+  });
+}
+
+function circleGeoJSON(lat, lng, radiusKm, steps=64) {
+  const pts=[];
+  for(let i=0;i<=steps;i++){const a=(i/steps)*2*Math.PI;pts.push([lng+(radiusKm/(111.32*Math.cos(lat*Math.PI/180)))*Math.sin(a),lat+(radiusKm/111.32)*Math.cos(a)]);}
+  return {type:'Feature',geometry:{type:'Polygon',coordinates:[pts]}};
+}
+
+// ── Legend ──
+function renderLegend() {
+  const body       = document.getElementById('legend-body');
+  if (!subject && !comps.length) { body.innerHTML='<div id="legend-empty">Add properties to see legend</div>'; return; }
+
+  const clrSubject = document.getElementById('clr-subject').value;
+  const clrComp    = document.getElementById('clr-comp').value;
+  const segmented  = document.getElementById('legend-segment') && document.getElementById('legend-segment').checked;
+  const r1on       = document.getElementById('r1').checked;
+  const r3on       = document.getElementById('r3').checked;
+  const r5on       = document.getElementById('r5').checked;
+  const anyRing    = r1on || r3on || r5on;
+
+  let html = '';
+
+  // Subject section always shown if set
+  if (subject) {
+    html += `<div class="legend-section-title">Subject</div>`;
+    html += `<div class="legend-item"><div class="legend-dot" style="background:${clrSubject}">★</div><span>${esc(subject.name)}</span></div>`;
+  }
+
+  if (!comps.length) { body.innerHTML = html; return; }
+
+  if (segmented && anyRing) {
+    // Build buckets: within 1, within 3 (but >1), within 5 (but >3), beyond all active rings
+    const buckets = [];
+    if (r1on) buckets.push({ label: 'Within 1 Mile', max: 1, min: 0 });
+    if (r3on) buckets.push({ label: 'Within 3 Miles', max: 3, min: r1on ? 1 : 0 });
+    if (r5on) buckets.push({ label: 'Within 5 Miles', max: 5, min: r3on ? 3 : r1on ? 1 : 0 });
+    // Beyond largest active ring
+    const maxActive = r5on ? 5 : r3on ? 3 : 1;
+    buckets.push({ label: `Beyond ${maxActive} Mile${maxActive > 1 ? 's' : ''}`, max: Infinity, min: maxActive });
+
+    buckets.forEach(bucket => {
+      const items = comps.map((c,i) => ({c,i:i+1})).filter(({c}) => {
+        if (c.dist == null) return bucket.max === Infinity;
+        return c.dist > bucket.min && c.dist <= bucket.max;
+      });
+      if (!items.length) return;
+      html += `<div class="legend-section-title">${bucket.label}</div>`;
+      items.forEach(({c,i}) => html += `<div class="legend-item"><div class="legend-dot" style="background:${clrComp}">${i}</div><span>${esc(c.name)}</span></div>`);
+    });
+  } else {
+    // Flat list in pin order
+    html += `<div class="legend-section-title">Comparables</div>`;
+    comps.forEach((c,i) => html += `<div class="legend-item"><div class="legend-dot" style="background:${clrComp}">${i+1}</div><span>${esc(c.name)}</span></div>`);
+  }
+
+  body.innerHTML = html;
+}
+
+// ── Map style ──
+function setStyle(style, btn) { document.querySelectorAll('.style-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); if(map) map.setStyle(STYLES[style]); }
+
+// ── Fit all ──
+function fitAll() {
+  if (!map) return;
+  const all = [subject,...comps].filter(Boolean).filter(p=>p.lat);
+  if (!all.length) return;
+  if (all.length===1) { map.flyTo({center:[all[0].lng,all[0].lat],zoom:14}); return; }
+  const lngs=all.map(p=>p.lng), lats=all.map(p=>p.lat);
+  map.fitBounds([[Math.min(...lngs),Math.min(...lats)],[Math.max(...lngs),Math.max(...lats)]],{padding:70,duration:700});
+}
+
+// ── Draggable legend ──
+(function(){
+  const leg=document.getElementById('legend'), head=document.getElementById('legend-head');
+  let ox,oy,dragging=false;
+  head.addEventListener('mousedown', e => {
+    dragging=true; ox=e.clientX-leg.getBoundingClientRect().left; oy=e.clientY-leg.getBoundingClientRect().top;
+    const wrap=document.getElementById('map-wrap').getBoundingClientRect(), rect=leg.getBoundingClientRect();
+    leg.style.bottom='auto'; leg.style.right='auto';
+    leg.style.top=(rect.top-wrap.top)+'px'; leg.style.left=(rect.left-wrap.left)+'px';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if(!dragging) return;
+    const wrap=document.getElementById('map-wrap').getBoundingClientRect();
+    leg.style.left=Math.max(0,Math.min(wrap.width-leg.offsetWidth,  e.clientX-wrap.left-ox))+'px';
+    leg.style.top =Math.max(0,Math.min(wrap.height-leg.offsetHeight,e.clientY-wrap.top-oy))+'px';
+  });
+  document.addEventListener('mouseup', ()=>dragging=false);
+})();
+
+// ── Utility ──
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Enter key shortcuts (only when dropdown not open) ──
+document.getElementById('s-addr').addEventListener('keydown', e => { if(e.key==='Enter' && !document.getElementById('s-ac').classList.contains('open')) setSubject(); });
+document.getElementById('c-addr').addEventListener('keydown', e => { if(e.key==='Enter' && !document.getElementById('c-ac').classList.contains('open')) addComp(); });
+
+
+// ── Save / Share (encoded URL) ──
+function saveMap() {
+  const state = {
+    v: 1,
+    subject: subject ? { name: subject.name, addr: subject.addr, lat: subject.lat, lng: subject.lng } : null,
+    comps: comps.map(c => ({ name: c.name, addr: c.addr, lat: c.lat, lng: c.lng })),
+    rings: [...activeRings],
+    clrSubject: document.getElementById('clr-subject').value,
+    clrComp:    document.getElementById('clr-comp').value,
+    clrRing:    document.getElementById('clr-ring').value,
+    mapStyle:   document.querySelector('.style-btn.active')?.textContent?.trim() || 'Streets',
+    segment:    document.getElementById('legend-segment').checked,
+  };
+  const json    = JSON.stringify(state);
+  const encoded = btoa(encodeURIComponent(json));
+  const url     = window.location.origin + window.location.pathname + '?map=' + encoded;
+  document.getElementById('share-url').value = url;
+  showCopyFeedback(false);
+}
+
+function copyShareLink() {
+  const url = document.getElementById('share-url').value;
+  if (!url || url === 'Save your map to generate a link') { saveMap(); return; }
+  navigator.clipboard.writeText(url).then(() => showCopyFeedback(true)).catch(() => {
+    document.getElementById('share-url').select();
+    document.execCommand('copy');
+    showCopyFeedback(true);
+  });
+}
+
+function showCopyFeedback(copied) {
+  const btn = document.getElementById('share-copy-btn');
+  btn.textContent = copied ? '✓ Copied!' : '⎘ Copy';
+  btn.classList.toggle('copied', copied);
+  if (copied) setTimeout(() => { btn.textContent = '⎘ Copy'; btn.classList.remove('copied'); }, 2000);
+}
+
+function loadFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  const encoded = params.get('map');
+  if (!encoded) return;
+  try {
+    const json  = decodeURIComponent(atob(encoded));
+    const state = JSON.parse(json);
+    if (state.v !== 1) return;
+
+    // Restore subject
+    if (state.subject) {
+      subject = { id: 'subject', ...state.subject };
+      document.getElementById('subject-name-display').textContent = subject.name;
+      document.getElementById('subject-addr-display').textContent = subject.addr;
+      document.getElementById('subject-display').style.display    = 'block';
+      document.getElementById('subject-form').style.display       = 'none';
+      document.getElementById('subject-edit-btn').style.display   = 'inline';
+      document.getElementById('subject-edit-btn').textContent     = 'Edit';
+    }
+
+    // Restore comps
+    comps = (state.comps || []).map((c, i) => ({ id: Date.now() + i, ...c, dist: null }));
+
+    // Restore colors
+    if (state.clrSubject) document.getElementById('clr-subject').value = state.clrSubject;
+    if (state.clrComp)    document.getElementById('clr-comp').value    = state.clrComp;
+    if (state.clrRing)    document.getElementById('clr-ring').value    = state.clrRing;
+    if (state.segment !== undefined) document.getElementById('legend-segment').checked = state.segment;
+
+    // Restore rings
+    activeRings = new Set((state.rings || []).map(Number));
+    [1,3,5].forEach(m => {
+      const cb = document.getElementById('r' + m);
+      if (cb) cb.checked = activeRings.has(m);
+    });
+
+    // Restore map style
+    if (state.mapStyle) {
+      const styleMap = { Streets:'streets', Satellite:'satellite', Hybrid:'satellite-streets', Light:'light', Dark:'dark', Terrain:'outdoors' };
+      const key = styleMap[state.mapStyle];
+      if (key) {
+        document.querySelectorAll('.style-btn').forEach(b => {
+          if (b.textContent.trim() === state.mapStyle) { b.classList.add('active'); if(map) map.setStyle(STYLES[key]); }
+          else b.classList.remove('active');
+        });
+      }
+    }
+
+    // Recalc distances and render
+    if (subject) { recalcDists(); sortComps(); }
+    renderPropList();
+
+    // Show the link in the bar
+    document.getElementById('share-url').value = window.location.href;
+
+    // Fit map once loaded
+    if (mapReady) { refreshMarkers(); refreshRings(); fitAll(); }
+    else {
+      const onLoad = () => { refreshMarkers(); refreshRings(); fitAll(); map.off('load', onLoad); };
+      map && map.on('load', onLoad);
+    }
+  } catch(e) { console.warn('Could not restore map from URL:', e); }
+}
+
+loadFromURL();
+initMap();
+</script>
+</body>
+</html>
